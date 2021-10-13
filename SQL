@@ -1,0 +1,97 @@
+use Northwind
+--1. Как называется самый дорогой товар из товарной категории №1?+
+
+SELECT ProductName, UnitPrice 
+FROM dbo.Products 
+WHERE UnitPrice = (SELECT MAX(UnitPrice) 
+					FROM dbo.Products
+					WHERE CategoryID =1)
+
+--2. В какие города заказы комплектовались более десяти дней?+
+
+SELECT ShipCity
+FROM dbo.Orders 
+WHERE DATEDIFF (DAY, OrderDate, ShippedDate)< 10-- and ShippedDate is null
+
+--3. Какие покупатели до сих пор ждут отгрузки своих заказов?
+
+SELECT CompanyName 
+FROM dbo.Customers 
+inner join dbo.Orders
+ON dbo.Customers.CustomerID = dbo.Orders.CustomerID
+WHERE ShippedDate is null
+
+--4. Скольких покупателей обслужил продавец, лидирующий по общему количеству заказов?
+
+DECLARE @EmployeeId int;
+
+SELECT
+	@EmployeeId = EmployeeID
+FROM(
+	SELECT TOP 1
+		EmployeeID,
+		COUNT(*) as TotalCount
+	FROM dbo.Orders
+	GROUP BY EmployeeID
+	ORDER BY 2 DESC
+) AS base
+ 
+SELECT Orders.CustomerID, COUNT ( Orders.CustomerID) as NumberOfOrders  
+FROM dbo.Orders 
+WHERE Orders.EmployeeID = @EmployeeId
+GROUP BY Orders.CustomerID HAVING COUNT ( Orders.CustomerID)=(SELECT TOP 1 COUNT ( Orders.CustomerID) as NumberOfOrders  
+FROM dbo.Orders 
+WHERE Orders.EmployeeID = @EmployeeId
+GROUP BY Orders.CustomerID order by NumberOfOrders desc )
+
+--5. Сколько французских городов обслужил продавец №1 в 1997-м?
+
+SELECT  COUNT(*)
+FROM dbo.Orders 
+WHERE YEAR(Orders.OrderDate) = 1997 AND Orders.EmployeeID = 1 AND ShipCountry = 'France'
+
+--6. В каких странах есть города, в которые было отправлено больше двух заказов?
+SELECT ShipCountry
+FROM dbo.Orders 
+Where ShipCity in (SELECT ShipCity
+FROM dbo.Orders  
+Group By ShipCity Having Count(OrderID)>2)
+Group By ShipCountry
+
+--7. Перечислите названия товаров, которые были проданы в количестве менее 1000 штук (quantity)?
+
+SELECT ProductName
+FROM dbo.Products WHERE ProductID IN (SELECT ProductID
+FROM [Order Details]
+GROUP BY ProductID Having SUM(Quantity)<1000)
+
+--8. Как зовут покупателей, которые делали заказы с доставкой в другой город (не в тот, в котором они прописаны)?
+
+select ContactName, Customers.City, Orders.ShipCity 
+from Customers inner join Orders 
+on Customers.CustomerID = Orders.CustomerID 
+where not (Customers.City = Orders.ShipCity)
+
+--9. Товарами из какой категории в 1997-м году заинтересовалось больше всего компаний, имеющих факс?
+
+SELECT CategoryName, Count(ProductName)
+FROM Orders  JOIN [Order Details] ON Orders.OrderID=[Order Details].OrderID 
+JOIN Products ON [Order Details].ProductID=Products.ProductID
+JOIN Categories ON Products.CategoryID=Categories.CategoryID
+JOIN Customers ON Orders.CustomerID=Customers.CustomerID
+Where OrderDate BETWEEN '1997-01-01' AND '1997-12-31 23:59:59' AND Fax IS NOT Null 
+
+GROUP BY CategoryName HAVING Count(ProductName)=(SELECT TOP 1 Count(ProductName)
+FROM Orders  JOIN [Order Details] ON Orders.OrderID=[Order Details].OrderID 
+JOIN Products ON [Order Details].ProductID=Products.ProductID
+JOIN Categories ON Products.CategoryID=Categories.CategoryID
+JOIN Customers ON Orders.CustomerID=Customers.CustomerID
+Where OrderDate BETWEEN '1997-01-01' AND '1997-12-31 23:59:59' AND Fax IS NOT Null GROUP BY CategoryName)
+
+--10. Сколько всего единиц товаров (то есть, штук – Quantity) продал каждый продавец (имя, фамилия) осенью 1996 года?
+SELECT LastName, FirstName, Sum(Quantity)
+FROM Orders JOIN [Order Details] ON [Order Details].OrderID=Orders.OrderID 
+JOIN Employees ON Employees.EmployeeID=Orders.EmployeeID
+Where OrderDate BETWEEN '1996-09-01' AND '1996-11-30 23:59:59' 
+
+GROUP BY LastName, FirstName
